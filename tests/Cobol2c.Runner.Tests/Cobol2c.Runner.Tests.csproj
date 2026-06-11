@@ -21,9 +21,5 @@
     <ProjectReference Include="..\..\src\Cobol2c.Runner\Cobol2c.Runner.csproj" />
   </ItemGroup>
 
-  <!-- Resolve fixture and script paths relative to the repo root at test runtime -->
-  <ItemGroup>
-    <Compile Include="**\*.cs" />
-  </ItemGroup>
 
 </Project>
