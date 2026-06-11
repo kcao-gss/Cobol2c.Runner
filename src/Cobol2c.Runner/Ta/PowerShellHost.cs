@@ -2,8 +2,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using Cobol2c.Runner.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace Cobol2c.Runner.Ta;
 
@@ -13,6 +11,7 @@ namespace Cobol2c.Runner.Ta;
 ///
 /// Supports both PowerShell 7+ ("pwsh") and Windows PowerShell 5.1 ("powershell").
 /// If the configured exe is not found, the host falls back to the other automatically.
+/// Registered via a factory lambda in Program.cs to avoid DI constructor ambiguity.
 /// </summary>
 public class PowerShellHost
 {
@@ -24,12 +23,9 @@ public class PowerShellHost
         PropertyNameCaseInsensitive = true   // PS ConvertTo-Json emits PascalCase; C# models use PascalCase too
     };
 
-    /// <summary>DI constructor — picks up Runner:PowerShellExe from config.</summary>
-    public PowerShellHost(IOptions<RunnerOptions> opts) : this(opts.Value.PowerShellExe) { }
-
     /// <summary>
-    /// Direct constructor (used by xUnit tests and single-line construction).
     /// Defaults to "pwsh" (PowerShell 7+). Pass "powershell" for Windows PowerShell 5.1.
+    /// Program.cs supplies the configured value from RunnerOptions.PowerShellExe.
     /// </summary>
     public PowerShellHost(string powerShellExe = "pwsh") => _exe = powerShellExe;
 

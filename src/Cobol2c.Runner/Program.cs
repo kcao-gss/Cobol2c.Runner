@@ -1,6 +1,7 @@
 using Cobol2c.Runner;
 using Cobol2c.Runner.Configuration;
 using Cobol2c.Runner.Jobs;
+using Microsoft.Extensions.Options;
 using Cobol2c.Runner.Reporting;
 using Cobol2c.Runner.Sinks;
 using Cobol2c.Runner.Ta;
@@ -15,8 +16,9 @@ var host = Host.CreateDefaultBuilder(args)
 
         var opts = ctx.Configuration.GetSection("Runner").Get<RunnerOptions>() ?? new RunnerOptions();
 
-        // Shared infrastructure
-        services.AddSingleton<PowerShellHost>();
+        // Shared infrastructure — factory avoids DI constructor ambiguity on PowerShellHost
+        services.AddSingleton(sp =>
+            new PowerShellHost(sp.GetRequiredService<IOptions<RunnerOptions>>().Value.PowerShellExe));
         services.AddSingleton<ITriageEngine, PowerShellTriageEngine>();
 
         if (opts.UseMocks)
