@@ -43,4 +43,10 @@ public class RunnerOptions
 
     /// <summary>Launchpad Job Client secret. In production, load from environment / Launchpad secrets.</summary>
     public string? JobClientSecret { get; set; }
+
+    /// <summary>
+    /// Password for the TA01 account on the target VM (same across all TGFTA-### machines).
+    /// Load from environment variable Runner__Ta01Pw — never hardcode.
+    /// </summary>
+    public string? Ta01Pw { get; set; }
 }

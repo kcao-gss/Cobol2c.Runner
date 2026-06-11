@@ -19,8 +19,12 @@ param(
     [string]$Suite,
     [string]$Machine,
     [string]$Tcs,
-    [string]$Logging = 'true'
+    [string]$Logging = 'true',
+    [string]$Ta01Pw     # Password for TGFTA-###\TA01 — same across all machines
 )
+
+# Username is always derived from the machine name — never needs to be passed separately.
+$ta01User = "$Machine\TA01"
 
 $ErrorActionPreference = 'Stop'
 

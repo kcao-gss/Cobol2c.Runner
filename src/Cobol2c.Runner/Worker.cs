@@ -23,7 +23,9 @@ public class Worker : BackgroundService
     private readonly IBugReportGenerator _reporter;
     private readonly IResultSink _sink;
     private readonly TimeSpan _pollInterval;
+    private readonly bool _useMocks;
     private readonly ILogger<Worker> _logger;
+    private string? _machineOverride;
 
     public Worker(
         IJobSource jobSource,
@@ -40,11 +42,20 @@ public class Worker : BackgroundService
         _reporter     = reporter;
         _sink         = sink;
         _pollInterval = TimeSpan.FromMilliseconds(opts.Value.PollIntervalMs);
+        _useMocks     = opts.Value.UseMocks;
         _logger       = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        if (!_useMocks)
+        {
+            Console.Write("Enter TA machine number (e.g. 118 for TGFTA-118): ");
+            var input = Console.ReadLine()?.Trim();
+            if (!string.IsNullOrWhiteSpace(input))
+                _machineOverride = $"TGFTA-{input}";
+        }
+
         _logger.LogInformation("Cobol2c.Runner started. Polling every {Interval}ms.", _pollInterval.TotalMilliseconds);
 
         while (!ct.IsCancellationRequested)
@@ -58,6 +69,9 @@ public class Worker : BackgroundService
                     await Task.Delay(_pollInterval, ct);
                     continue;
                 }
+
+                if (_machineOverride is not null)
+                    job = job with { Machine = _machineOverride };
 
                 _logger.LogInformation("Processing job {JobId} ({Suite}/{Machine}, TCs: {Tcs})",
                     job.Id, job.Suite, job.Machine, string.Join(",", job.Tcs));
