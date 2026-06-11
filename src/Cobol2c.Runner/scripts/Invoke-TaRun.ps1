@@ -24,6 +24,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Emit UTF-8 to the redirected pipe so C# reads it correctly on both PS 5.1 and PS 7.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+
 # --- PLACEHOLDER: implement from run-ta-tests/SKILL.md when deploying to the GSS box ---
 # Key steps to port:
 #   1. Resolve VM FQDN: "${Machine}.gss.local" (VMs are not domain-joined)

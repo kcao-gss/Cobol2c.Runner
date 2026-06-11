@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
 # TaRouting.Tests.ps1 — unit tests for the routing-config toggle helpers
 # These functions are pure string transforms — no file I/O, no network, fully deterministic.
 

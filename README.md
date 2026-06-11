@@ -10,11 +10,12 @@ Automated triage runner for the COBOL→C# conversion pipeline.
 | Tool | Version | Notes |
 |------|---------|-------|
 | [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8) | 8.x | Runtime only is NOT enough — you need the SDK to build |
-| [PowerShell 7+](https://github.com/PowerShell/PowerShell/releases) | 7.4+ | `pwsh` must be on PATH |
-| [Pester](https://pester.dev/docs/introduction/installation) | 5.x | For PS unit tests only |
+| PowerShell | 5.1+ | **Windows PowerShell 5.1** ships in-box on all Windows (no install needed). [PowerShell 7+](https://github.com/PowerShell/PowerShell/releases) is also supported. Default config uses `pwsh`; see config table to switch. |
+| [Pester](https://pester.dev/docs/introduction/installation) | 5.x | For PS unit tests only. PS 5.1 ships with legacy Pester 3 — install Pester 5 explicitly. |
 
 Install SDK: `winget install Microsoft.DotNet.SDK.8`  
-Install Pester: `Install-Module Pester -Force -SkipPublisherCheck`
+Install Pester 5: `Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck`  
+On PS 5.1, load the right Pester before running: `Import-Module Pester -MinimumVersion 5.0`
 
 ## Quick Start (PoC — fully local, no network needed)
 
@@ -86,6 +87,7 @@ fixtures\
 | `JobsPath` | `../../fixtures/jobs` | Where `LocalFileJobSource` watches |
 | `OutputPath` | `../../out` | Where `LocalJsonResultSink` writes |
 | `ScriptsPath` | `scripts` | Relative to the executable (copied by build) |
+| `PowerShellExe` | `pwsh` | `pwsh` = PowerShell 7+; `powershell` = Windows PowerShell 5.1. Auto-falls back if the configured exe is not found. |
 | `PollIntervalMs` | `2000` | Empty-queue delay |
 
 ## Go-Live Swap Table

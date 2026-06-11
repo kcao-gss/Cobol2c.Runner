@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
 # TaTrace.Tests.ps1 — unit tests for Get-CrashSignature and Get-FlowDivergence
 
 # Top-level BeforeAll: path setup runs during the run phase, not just discovery.

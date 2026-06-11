@@ -20,6 +20,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Emit UTF-8 to the redirected pipe so C# reads it correctly on both PS 5.1 and PS 7.
+# PS 5.1 defaults to the system code page on redirected output; PS 7 already defaults to UTF-8.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+
 # Import modules from same directory as this script
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $scriptDir 'TaParsing.psm1') -Force

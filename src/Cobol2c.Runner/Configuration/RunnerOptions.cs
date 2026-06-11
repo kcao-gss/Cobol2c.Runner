@@ -23,6 +23,13 @@ public class RunnerOptions
     /// </summary>
     public string ScriptsPath { get; set; } = "scripts";
 
+    /// <summary>
+    /// PowerShell executable used to run scripts. Use "pwsh" for PowerShell 7+ or "powershell"
+    /// for the in-box Windows PowerShell 5.1. If the configured exe is not found at startup,
+    /// PowerShellHost falls back to the other automatically.
+    /// </summary>
+    public string PowerShellExe { get; set; } = "pwsh";
+
     /// <summary>How long to wait between job polls when the queue is empty.</summary>
     public int PollIntervalMs { get; set; } = 2000;
 
