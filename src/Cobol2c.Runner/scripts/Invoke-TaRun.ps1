@@ -47,13 +47,18 @@ $TaskName = "TA_Run_$Machine"
 $ts       = Get-Date -Format 'yyyyMMdd_HHmmss'
 
 # ── TC manifest (TC number → rep / prj / treepath) ────────────────────────────
-# One-time setup: use ta_generate_execute_bat MCP tool in Claude to resolve your TCs and save
-# the result as tc-manifest.json on the TAShare. The runner reads it on every run.
-$manifestPath = Join-Path $FailBase 'tc-manifest.json'
+# Looked up in order: script directory first (shipped with the runner), then TAShare.
+# To add TCs: use the ta_generate_execute_bat MCP tool in a Claude Code session and add the
+# entry to src/Cobol2c.Runner/scripts/tc-manifest.json, then commit.
+$scriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
+$manifestPath = Join-Path $scriptDir 'tc-manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath)) {
-    throw ("TC manifest not found: $manifestPath`n" +
-           "Create tc-manifest.json (array of {tc, rep, prj, path} objects) on the TAShare.`n" +
-           "Use the ta_generate_execute_bat MCP tool in Claude to resolve the TCs, then save here.")
+    $manifestPath = Join-Path $FailBase 'tc-manifest.json'
+}
+if (-not (Test-Path -LiteralPath $manifestPath)) {
+    throw ("TC manifest not found in script dir or TAShare ($FailBase).`n" +
+           "Add tc-manifest.json (array of {tc, rep, prj, path} objects) next to Invoke-TaRun.ps1.`n" +
+           "Use ta_generate_execute_bat MCP tool in Claude to resolve TC paths.")
 }
 $manifestMap = @{}
 (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json) |
