@@ -21,23 +21,17 @@ var host = Host.CreateDefaultBuilder(args)
             new PowerShellHost(sp.GetRequiredService<IOptions<RunnerOptions>>().Value.PowerShellExe));
         services.AddSingleton<ITriageEngine, PowerShellTriageEngine>();
 
+        // Job source, reporting, and sink stay local until Launchpad dashboard is built.
+        services.AddSingleton<IJobSource, LocalFileJobSource>();
+        services.AddSingleton<IBugReportGenerator, TemplateBugReportGenerator>();
+        services.AddSingleton<IResultSink, LocalJsonResultSink>();
+
+        // UseMocks=false → real TA execution via PowerShell (requires VPN + Runner__Ta01Pw env var).
+        // UseMocks=true  → MockTaExecutor returns fixture paths instantly (default, no network needed).
         if (opts.UseMocks)
-        {
-            // PoC: all local, no network, no credentials
-            services.AddSingleton<IJobSource, LocalFileJobSource>();
             services.AddSingleton<ITaExecutor, MockTaExecutor>();
-            services.AddSingleton<IBugReportGenerator, TemplateBugReportGenerator>();
-            services.AddSingleton<IResultSink, LocalJsonResultSink>();
-        }
         else
-        {
-            // Production: Launchpad Job Client + real TA executor + Claude report + HTTP sink
-            // Each of these requires env/secrets config — see README.md §Go-Live Swap Table
-            services.AddSingleton<IJobSource, HttpJobSource>();
             services.AddSingleton<ITaExecutor, PowerShellTaExecutor>();
-            services.AddSingleton<IBugReportGenerator, ClaudeBugReportGenerator>();
-            services.AddSingleton<IResultSink, HttpResultSink>();
-        }
 
         services.AddHostedService<Worker>();
     })
