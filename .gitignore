@@ -1,0 +1,18 @@
+# .NET build output
+bin/
+obj/
+out/
+
+# Test results / coverage
+TestResults/
+*.trx
+*.coverage
+
+# VS / Rider
+.vs/
+.idea/
+*.user
+
+# OS
+Thumbs.db
+.DS_Store

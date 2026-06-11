@@ -1,0 +1,6 @@
+AutoTrace | INFO | GSSERP.GSSMENU._Run | 2026-06-09 09:15:05.0000 | 0 | Entering Program | Program INV010XR
+AutoTrace | INFO | GSSERP.INVMAIN._Run | 2026-06-09 09:15:05.0200 | 20 | Entering Program | Program INVMAIN
+AutoTrace | INFO | GSSERP.INV010XR._Run | 2026-06-09 09:15:05.0300 | 30 | Entering Program | Program INV010XR
+AutoTrace | INFO | GSSERP.INV010XR._Run | 2026-06-09 09:15:06.0000 | 1000 | Leaving Program | Program INV010XR
+AutoTrace | INFO | GSSERP.INVMAIN._Run | 2026-06-09 09:15:06.0100 | 1010 | Leaving Program | Program INVMAIN
+AutoTrace | INFO | GSSERP.GSSMENU._Run | 2026-06-09 09:15:06.0200 | 1020 | EndTask | Clean shutdown complete

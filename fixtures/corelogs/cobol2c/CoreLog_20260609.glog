@@ -1,0 +1,8 @@
+AutoTrace | INFO | Gss.SupplyChain.Inventory.Base.PartCrossReferenceMaintenance.Run | 2026-06-09 10:30:05.0000 | 0 | Entering Program | Program INV010XR
+AutoTrace | INFO | GSSERP.GSSMENU._Run | 2026-06-09 10:30:05.0100 | 10 | Calling C# Program | INV010XR routed to C# from COBOL
+AutoTrace | INFO | GSSERP.INVMAIN._Run | 2026-06-09 10:30:05.0200 | 20 | Entering Program | Program INVMAIN
+AutoTrace | INFO | GSSERP.INV010XR._Run | 2026-06-09 10:30:05.0300 | 30 | Entering Program | Program INV010XR
+AutoTrace | ERROR | GSSERP.SYS032.GET-CALL-STACK | 2026-06-09 10:30:05.5000 | 500 | Exception Callstack |   at SemanticDesigns.Base.ByteEncodeStringWithCount(String s, Int32 maxLen)
+AutoTrace | ERROR | GSSERP.SYS032.GET-CALL-STACK | 2026-06-09 10:30:05.5010 | 510 | Leaving SYS032 | STRING: INV010XR<-INV010XR<-INVMAIN<-GSSMENU
+AutoTrace | INFO | GSSERP.MSG100._Run | 2026-06-09 10:30:05.5020 | 520 | Entering Program | Program MSG100
+AutoTrace | INFO | GSSERP.MSG100._Run | 2026-06-09 10:30:05.5030 | 530 | Entering MSG100 | MSG-NUM: 1001
