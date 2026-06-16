@@ -45,8 +45,49 @@ public class RunnerOptions
     public string? JobClientSecret { get; set; }
 
     /// <summary>
+    /// Per-job timeout in minutes. If the PowerShell script does not exit within this window
+    /// (e.g. because the VM is locked or unreachable), the job is cancelled and routed to failed/.
+    /// Default 120 min covers two full 45-min poll cycles plus buffer.
+    /// Override with env var Runner__JobTimeoutMinutes.
+    /// </summary>
+    public int JobTimeoutMinutes { get; set; } = 180;
+
+    /// <summary>
+    /// When true, automatically recovers a wedged VM (Trigger A: RDP-drop signature;
+    /// Trigger B: started.txt idle 45+ min) by rebooting, re-logging in TA01, and retrying
+    /// only the affected TCs - capped at 2 recoveries per suite run.
+    /// When false, throws an actionable error and moves the job to failed/ for manual retry.
+    /// Default true. Override with env var Runner__AutoRecover.
+    /// </summary>
+    public bool AutoRecover { get; set; } = true;
+
+    /// <summary>
+    /// When true, reboots the VM and waits for it to come back before pushing each batch.
+    /// Ensures every run starts from a clean boot state, eliminating stale-session or
+    /// leftover-process false positives. Adds ~5-10 min per job.
+    /// Override with env var Runner__RebootBeforeRun.
+    /// </summary>
+    public bool RebootBeforeRun { get; set; } = true;
+
+    /// <summary>
+    /// Pool of VM names to draw confirmation runs from. Must contain at least ConfirmationRuns
+    /// machines. The first ConfirmationRuns machines that pass the readiness probe are used.
+    /// Override with env var Runner__MachinePool (comma-separated list).
+    /// </summary>
+    public string[] MachinePool { get; set; } = ["TGFTA-118", "TGFTA-119", "TGFTA-120", "TGFTA-124", "TGFTA-125", "TGFTA-126"];
+
+    /// <summary>
+    /// Number of machines to run each TC on per job. A TC is only confirmed as a real regression
+    /// when it fails on ALL ConfirmationRuns machines (unanimous adjudication - any single pass
+    /// is classified as an environmental/flaky failure, not a regression).
+    /// Set to 1 to use the original single-machine behavior.
+    /// Override with env var Runner__ConfirmationRuns.
+    /// </summary>
+    public int ConfirmationRuns { get; set; } = 3;
+
+    /// <summary>
     /// Password for the TA01 account on the target VM (same across all TGFTA-### machines).
-    /// Load from environment variable Runner__Ta01Pw — never hardcode.
+    /// Load from environment variable Runner__Ta01Pw - never hardcode.
     /// </summary>
     public string? Ta01Pw { get; set; }
 }
