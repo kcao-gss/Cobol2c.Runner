@@ -1,13 +1,13 @@
-# TaRouting.psm1
-# Pure routing-config toggle helpers — lifted VERBATIM from regression_test_with_ta/SKILL.md
+﻿# TaRouting.psm1
+# Pure routing-config toggle helpers - lifted VERBATIM from regression_test_with_ta/SKILL.md
 # §"Toggle helpers" (validated to round-trip exactly).
 #
 # These functions are TESTED but NOT EXECUTED in the PoC (report-only scope).
 # They're included now so Phase-3 routing bisection can plug in without changes.
 #
 # Routing config format: flat JSON {"<C# class>":"GSSERP.<PGM>"}
-#   - key WITH ~  → routing-to-COBOL disabled → runs C# (Cobol2C)
-#   - key WITHOUT ~ → routing-to-COBOL ON   → runs original COBOL
+#   - key WITH ~  -> routing-to-COBOL disabled -> runs C# (Cobol2C)
+#   - key WITHOUT ~ -> routing-to-COBOL ON   -> runs original COBOL
 #
 # Production paths (not used locally):
 #   Shared baseline (READ): \\gss2k19rnd.gss.local\TAShare\Cobol2C\GSSCoreModernCodeConfig.tempCache
@@ -35,7 +35,7 @@ function Use-Cobol {
     .SYNOPSIS
     Force an EXISTING entry to run COBOL (remove its ~). Idempotent.
     Uses String.Replace (literal) to avoid regex replacement-template expansion
-    — a $Key containing $1 or ${name} would corrupt the JSON under -replace.
+    - a $Key containing $1 or ${name} would corrupt the JSON under -replace.
     #>
     param([string]$Json, [string]$Key)
     $Json.Replace('"~' + $Key + '"', '"' + $Key + '"')
@@ -56,8 +56,8 @@ function Add-CobolRoute {
     <#
     .SYNOPSIS
     Bring an UNLISTED program under routing control, forced to COBOL (no ~).
-    Idempotent — does nothing if the C# class is already in the JSON.
-    Handles empty-object ({}) correctly — no trailing comma on first entry.
+    Idempotent - does nothing if the C# class is already in the JSON.
+    Handles empty-object ({}) correctly - no trailing comma on first entry.
     #>
     param([string]$Json, [string]$Class, [string]$Pgm)
     if ($Json -match [regex]::Escape($Class)) { return $Json }

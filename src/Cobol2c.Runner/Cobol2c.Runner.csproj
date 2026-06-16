@@ -12,11 +12,12 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
   </ItemGroup>
 
-  <!-- Copy PowerShell scripts to output so they're findable at runtime -->
+  <!-- Copy PowerShell scripts to output and publish so they're findable at runtime -->
   <ItemGroup>
-    <Content Include="scripts\**\*">
+    <None Include="scripts\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-# TaParsing.psm1
+﻿# TaParsing.psm1
 # Lifted verbatim from regression_test_with_ta/SKILL.md §Step 2-3.
 # Parse TA HTML result files and apply the comparability gate.
 

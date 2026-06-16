@@ -1,4 +1,4 @@
-# TaTrace.psm1
+﻿# TaTrace.psm1
 # Lifted from regression_test_with_ta/SKILL.md §Step 4-5 (CoreLog reference section).
 # Parse AutoTrace CoreLog .glog files: crash extraction and flow-sequence divergence.
 

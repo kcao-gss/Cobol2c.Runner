@@ -1,10 +1,10 @@
-<#
+﻿<#
 .SYNOPSIS
 Report-only triage entry point. Parses TA HTML logs + CoreLog traces and emits a
 TriageResult JSON object to stdout. Called by PowerShellTriageEngine via PowerShellHost.
 
-Phases covered: collect → compare (comparability gate) → trace (crash extraction) → flow-diff.
-Routing bisection (isolate/locate/fix) is NOT performed here — report-only scope.
+Phases covered: collect -> compare (comparability gate) -> trace (crash extraction) -> flow-diff.
+Routing bisection (isolate/locate/fix) is NOT performed here - report-only scope.
 
 .PARAMETER FailLogDir     Directory of Cobol2C HTML result files (*.html).
 .PARAMETER RefLogDir      Directory of reference (SP2V6/Production) HTML result files.
@@ -65,7 +65,7 @@ foreach ($tc in $gated.Comparable) {
     })
 }
 
-# Emit single JSON object to stdout — deserialized by PowerShellHost.RunScriptAsync<TriageResult>
+# Emit single JSON object to stdout - deserialized by PowerShellHost.RunScriptAsync<TriageResult>
 [pscustomobject]@{
     HasRegressions     = ($findings.Count -gt 0)
     ComparableCount    = $gated.Comparable.Count
