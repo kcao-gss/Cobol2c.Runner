@@ -225,78 +225,6 @@ Describe 'Get-AffectedTests' {
 }
 
 # -----------------------------------------------------------------------------
-# Connect-TA01Rdp and Invoke-VMRecovery tests
-#
-# Pattern: mocks for private script: functions require InModuleScope { Mock } so Pester's
-# proxy replaces the function in the module's own script scope.  The function under test is
-# called INSIDE the It block so Should -Invoke counts calls from the current test scope.
-# -----------------------------------------------------------------------------
-Describe 'Connect-TA01Rdp' {
-    BeforeAll {
-        $script:repoRoot2  = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-        $script:scriptDir2 = Join-Path $script:repoRoot2 'src\Cobol2c.Runner\scripts'
-        Import-Module (Join-Path $script:scriptDir2 'TaRecovery.psm1') -Force
-    }
-
-    Context 'cert present - issues cmdkey, writes .rdp, signs, launches mstsc' {
-        BeforeAll {
-            InModuleScope TaRecovery {
-                Mock Invoke-RecoveryCmd {}
-                Mock Get-RdpSigningCert { [pscustomobject]@{ Thumbprint = 'AABBCC1122' } }
-                Mock Start-Process {}
-            }
-        }
-        AfterAll {
-            Remove-Item -LiteralPath (Join-Path $env:TEMP 'TGFTA_RDP\TGFTA-TEST.rdp') `
-                        -Force -ErrorAction SilentlyContinue
-        }
-
-        It 'issues cmdkey, writes .rdp with required fields, calls rdpsign and mstsc' {
-            Connect-TA01Rdp -Machine 'TGFTA-TEST' -Pass 'testpass'
-
-            # File assertions - real Set-Content runs inside the function
-            $rdpPath = Join-Path $env:TEMP 'TGFTA_RDP\TGFTA-TEST.rdp'
-            $rdpPath | Should -Exist
-            $content = Get-Content -LiteralPath $rdpPath -Raw
-            $content | Should -Match 'full address:s:TGFTA-TEST'
-            $content | Should -Match 'username:s:TGFTA-TEST\\TA01'
-            $content | Should -Match 'prompt for credentials:i:0'
-
-            # Mock call assertions - counted within this It block
-            Should -Invoke Invoke-RecoveryCmd -ModuleName TaRecovery `
-                -ParameterFilter { $Command -match 'cmdkey' -and $Command -match 'TGFTA-TEST' }
-            Should -Invoke Invoke-RecoveryCmd -ModuleName TaRecovery `
-                -ParameterFilter { $Command -match 'rdpsign' -and $Command -match 'AABBCC1122' }
-            Should -Invoke Start-Process -ModuleName TaRecovery `
-                -ParameterFilter { $FilePath -eq 'mstsc' }
-        }
-    }
-
-    Context 'cert absent - skips rdpsign, still launches mstsc' {
-        BeforeAll {
-            InModuleScope TaRecovery {
-                Mock Invoke-RecoveryCmd {}
-                Mock Get-RdpSigningCert { $null }
-                Mock Start-Process {}
-            }
-        }
-        AfterAll {
-            Remove-Item -LiteralPath (Join-Path $env:TEMP 'TGFTA_RDP\TGFTA-NOCERT.rdp') `
-                        -Force -ErrorAction SilentlyContinue
-        }
-
-        It 'skips rdpsign but still launches mstsc' {
-            Connect-TA01Rdp -Machine 'TGFTA-NOCERT' -Pass 'pw'
-
-            Should -Invoke Invoke-RecoveryCmd -ModuleName TaRecovery `
-                -ParameterFilter { $Command -match 'rdpsign' } -Times 0 -Exactly
-            Should -Invoke Start-Process -ModuleName TaRecovery `
-                -ParameterFilter { $FilePath -eq 'mstsc' }
-        }
-    }
-}
-
-# -----------------------------------------------------------------------------
 Describe 'Invoke-VmReboot' {
     BeforeAll {
         $script:repoRootVR  = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -310,7 +238,6 @@ Describe 'Invoke-VmReboot' {
                 Mock Invoke-RecoveryCmd {}
                 Mock Invoke-RecoverySleep {}
                 Mock Test-VmSharePath { $true }
-                Mock Connect-TA01Rdp {}
             }
         }
 
@@ -329,17 +256,10 @@ Describe 'Invoke-VmReboot' {
                 -Times 1 -Exactly
         }
 
-        It 'calls Connect-TA01Rdp with the correct machine and password' {
-            Invoke-VmReboot -Machine 'TGFTA-VR1' -Ta01Pw 'mypw'
-
-            Should -Invoke Connect-TA01Rdp -ModuleName TaRecovery `
-                -ParameterFilter { $Machine -eq 'TGFTA-VR1' -and $Pass -eq 'mypw' }
-        }
-
-        It 'sleeps exactly 4 times: 45s pre-reboot + 15s poll + 45s settle + 20s mstsc' {
+        It 'sleeps exactly 3 times: 45s pre-reboot + 15s poll + 45s auto-logon settle' {
             Invoke-VmReboot -Machine 'TGFTA-VR1' -Ta01Pw 'pw'
 
-            Should -Invoke Invoke-RecoverySleep -ModuleName TaRecovery -Times 4 -Exactly
+            Should -Invoke Invoke-RecoverySleep -ModuleName TaRecovery -Times 3 -Exactly
         }
     }
 
@@ -353,15 +273,13 @@ Describe 'Invoke-VmReboot' {
                     $script:vrPollCount++
                     $script:vrPollCount -ge 2   # false on first call, true on second
                 }
-                Mock Connect-TA01Rdp {}
             }
         }
 
-        It 'polls share twice and still calls Connect-TA01Rdp' {
+        It 'polls share twice and completes without error' {
             Invoke-VmReboot -Machine 'TGFTA-VR2' -Ta01Pw 'pw'
 
             Should -Invoke Test-VmSharePath -ModuleName TaRecovery -Times 2 -Exactly
-            Should -Invoke Connect-TA01Rdp -ModuleName TaRecovery -Times 1 -Exactly
         }
     }
 }
@@ -374,17 +292,16 @@ Describe 'Invoke-VMRecovery' {
         Import-Module (Join-Path $script:scriptDir3 'TaRecovery.psm1') -Force
     }
 
-    Context 'happy path - issues end+shutdown, waits for share, calls Connect-TA01Rdp' {
+    Context 'happy path - issues end+shutdown, waits for share, lets auto-logon settle' {
         BeforeAll {
             InModuleScope TaRecovery {
                 Mock Invoke-RecoveryCmd {}
                 Mock Invoke-RecoverySleep {}
                 Mock Test-VmSharePath { $true }
-                Mock Connect-TA01Rdp {}
             }
         }
 
-        It 'issues schtasks /end -> shutdown /r -> polls share -> calls Connect-TA01Rdp -> sleeps' {
+        It 'issues schtasks /end -> shutdown /r -> polls share -> sleeps for auto-logon settle' {
             Invoke-VMRecovery -Machine 'TGFTA-REC' -Ta01Pw 'pw' -TaskName 'TestTask'
 
             Should -Invoke Invoke-RecoveryCmd -ModuleName TaRecovery `
@@ -392,27 +309,24 @@ Describe 'Invoke-VMRecovery' {
             Should -Invoke Invoke-RecoveryCmd -ModuleName TaRecovery `
                 -ParameterFilter { $Command -match 'shutdown /r' -and $Command -match 'TGFTA-REC' }
             Should -Invoke Test-VmSharePath -ModuleName TaRecovery -Times 1 -Exactly
-            Should -Invoke Connect-TA01Rdp -ModuleName TaRecovery `
-                -ParameterFilter { $Machine -eq 'TGFTA-REC' }
-            # 4 sleeps: 45 (reboot) + 15 (do-until always fires once) + 45 (settle) + 20 (mstsc)
-            Should -Invoke Invoke-RecoverySleep -ModuleName TaRecovery -Times 4 -Exactly
+            # 3 sleeps: 45 (reboot) + 15 (do-until always fires once) + 45 (auto-logon settle)
+            Should -Invoke Invoke-RecoverySleep -ModuleName TaRecovery -Times 3 -Exactly
         }
     }
 
-    Context 'share probe returns immediately - still calls Connect-TA01Rdp' {
+    Context 'share probe returns immediately - completes without error' {
         BeforeAll {
             InModuleScope TaRecovery {
                 Mock Invoke-RecoveryCmd {}
                 Mock Invoke-RecoverySleep {}
                 Mock Test-VmSharePath { $true }
-                Mock Connect-TA01Rdp {}
             }
         }
 
-        It 'does not throw and calls Connect-TA01Rdp' {
+        It 'does not throw' {
             Invoke-VMRecovery -Machine 'TGFTA-SLOW' -Ta01Pw 'pw' -TaskName 'Task2'
 
-            Should -Invoke Connect-TA01Rdp -ModuleName TaRecovery -Times 1 -Exactly
+            Should -Invoke Invoke-RecoveryCmd -ModuleName TaRecovery -Times 2 -Exactly
         }
     }
 }

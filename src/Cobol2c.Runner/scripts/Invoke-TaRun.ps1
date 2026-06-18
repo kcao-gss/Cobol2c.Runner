@@ -15,8 +15,8 @@ Requires:
   - One-time per-VM admin setup (run Setup-Vm.ps1 on each VM):
       LocalAccountTokenFilterPolicy=1, Remote Scheduled Tasks firewall rule, Apps share + TA-CMD folder
   - \\gss2k19rnd.gss.local\TAShare\<Suite>\tc-manifest.json  (TC -> rep/prj/treepath)
-  - One-time controller setup (run Setup-RdpSigning.ps1 once) when AutoRecover=true:
-      Creates CN=TGFTA-RDP-Signing cert used to suppress the mstsc publisher prompt on re-login.
+  - VMs must be configured with console auto-logon for TA01 so reboot recovery is fully headless
+      (no RDP re-login required; Windows boots straight into an unlocked TA01 desktop).
 
 TC manifest format (one-time setup, populate using ta_generate_execute_bat MCP tool):
   [ { "tc":"27510", "rep":"Inventory", "prj":"Inventory",
@@ -77,9 +77,12 @@ $RefLogDir   = "\\gss2k19rnd.gss.local\TAShare\$RefSuite\Logs\$Machine"
 
 # -- Batch generator (ported from run-ta-tests/SKILL.md Step 2) -----------------
 # $HtmlDir is a UNC path on TAShare - written by the VM batch, read by the controller for polling.
-function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$HtmlDir, [string]$RunToken) {
+function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$HtmlDir, [string]$RunToken, [string]$SuiteName) {
     $kw      = if ($IsLogging) { 'new program,batch,2023,log,without service' }
                else             { 'new program,batch,2023,without service' }
+    # c2c flips GSS Communication Options Location to "COBOL 2 C#" (IVAL=3) so the suite runs against the
+    # converted programs. Cobol2C only - the SP2V6 reference must stay on the legacy baseline.
+    if ($SuiteName -eq 'Cobol2C') { $kw = "$kw,c2c" }
     $html    = $HtmlDir
     $tcLabel = ($Tests | ForEach-Object { $_.tc }) -join ', '
     $esc     = { param($s) (($s -replace '\^','^^') -replace '([&<>|()])','^$1') -replace '%','%%' }
@@ -158,7 +161,7 @@ function Invoke-SuiteRun ([string]$Base, [string]$SuiteName, [string]$BatName,
         $taskName  = "Cobol2c.Runner_${SuiteName}_${Machine}_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
         $localBat  = Join-Path $env:TEMP $BatName
         $vmBatPath = "C:\Apps\TA-CMD\$BatName"
-        Set-Content -Path $localBat -Value (New-TABatch $Base $currentTests $isLogging $HtmlDir $taskName) -Encoding Ascii
+        Set-Content -Path $localBat -Value (New-TABatch $Base $currentTests $isLogging $HtmlDir $taskName $SuiteName) -Encoding Ascii
 
         # -- Clear log dir ------------------------------------------------------
         if ($isFirstAttempt -and $ClearLogs) {
@@ -178,7 +181,7 @@ function Invoke-SuiteRun ([string]$Base, [string]$SuiteName, [string]$BatName,
             if (-not (Test-Path -LiteralPath $HtmlDir)) { $null = New-Item -ItemType Directory -Force -Path $HtmlDir }
             foreach ($t in $currentTests) {
                 Get-ChildItem -LiteralPath $HtmlDir -Filter '*.html' -File -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -match "^$([regex]::Escape($t.tc))\b" } |
+                    Where-Object { $_.Name -match "^$([regex]::Escape($t.tc))(?!\d)" } |
                     ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
                 Remove-Item -LiteralPath (Join-Path $HtmlDir "ta-exec-$($t.tc).log") -Force -ErrorAction SilentlyContinue
             }
@@ -345,11 +348,11 @@ if ($MyInvocation.InvocationName -ne '.') {
     # Reboots the VM, waits for the Apps share to return, and re-logs in TA01.
     # Adds ~5-10 min but eliminates stale-session and leftover-process false positives.
     if ($rebootBeforeRun) {
-        Write-Host "[$Machine] Pre-batch reboot - rebooting before running suites..."
+        [Console]::Error.WriteLine("[$Machine] Pre-batch reboot - rebooting before running suites...")
         Invoke-VmReboot -Machine $Machine -Ta01Pw $Ta01Pw
         # Re-probe: confirm the VM is fully up before handing off to the suite runners.
         Assert-VmReady -Machine $Machine -Ta01Pw $Ta01Pw
-        Write-Host "[$Machine] VM back online - proceeding with suites."
+        [Console]::Error.WriteLine("[$Machine] VM back online - proceeding with suites.")
     }
 
     # TC manifest - looked up in order: script directory first (shipped with the runner), then TAShare.

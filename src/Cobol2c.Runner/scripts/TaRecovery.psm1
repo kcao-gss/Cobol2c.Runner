@@ -4,7 +4,7 @@
 
 # -- Private seams (mockable via InModuleScope in Pester) ----------------------
 
-# cmd.exe wrapper for recovery commands (schtasks /end, shutdown /r, rdpsign).
+# cmd.exe wrapper for recovery commands (schtasks /end, shutdown /r).
 function script:Invoke-RecoveryCmd {
     param([string]$Command)
     $output = & cmd /c $Command 2>&1
@@ -21,13 +21,6 @@ function script:Invoke-RecoverySleep {
 function script:Test-VmSharePath {
     param([string]$Path)
     Test-Path -LiteralPath $Path
-}
-
-# Cert-store lookup - mocked in tests so they don't require a real cert installation.
-function script:Get-RdpSigningCert {
-    Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue |
-        Where-Object { $_.Subject -eq 'CN=TGFTA-RDP-Signing' } |
-        Select-Object -First 1
 }
 
 # -- Detection functions --------------------------------------------------------
@@ -114,58 +107,15 @@ function Get-AffectedTests {
 
 # -- Recovery actuators ---------------------------------------------------------
 
-function Connect-TA01Rdp {
-    <#
-    .SYNOPSIS
-    Establishes an RDP session to the VM as TA01, restoring the interactive desktop for GUI automation.
-    Uses cmdkey to store credentials silently, writes a prompt-suppressed .rdp file, optionally signs
-    it with the CN=TGFTA-RDP-Signing cert (created by Setup-RdpSigning.ps1 on the controller) to
-    suppress the publisher prompt, then launches mstsc.
-
-    The signing cert is optional - if absent the .rdp is still launched. Run Setup-RdpSigning.ps1
-    once on the controller to provision the cert for fully unattended operation.
-
-    Called by Invoke-VMRecovery after the VM reboots.
-    #>
-    param([string]$Machine, [string]$Pass)
-    $qual = "$Machine\TA01"
-
-    # Store credential so mstsc does not prompt
-    Invoke-RecoveryCmd "cmdkey /generic:TERMSRV/$Machine /user:$qual /pass:$Pass" | Out-Null
-
-    # Locate the RDP-signing cert (optional - suppresses publisher prompt)
-    $cert  = Get-RdpSigningCert
-    $thumb = if ($cert) { $cert.Thumbprint } else { $null }
-
-    # Write a minimal prompt-suppressed .rdp file (fields from SKILL.md Step 5.5)
-    $dir = Join-Path $env:TEMP 'TGFTA_RDP'
-    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    $rdp = Join-Path $dir "$Machine.rdp"
-    @(
-        "full address:s:$Machine",
-        "username:s:$qual",
-        'screen mode id:i:1',
-        'desktopwidth:i:1280',
-        'desktopheight:i:1024',
-        'redirectclipboard:i:0',
-        'prompt for credentials:i:0',
-        'promptcredentialonce:i:0',
-        'enablecredsspsupport:i:1',
-        'authentication level:i:0'
-    ) | Set-Content -LiteralPath $rdp -Encoding Ascii
-
-    # Sign to suppress the "publisher unknown" dialog (skipped when cert is absent)
-    if ($thumb) { Invoke-RecoveryCmd "rdpsign.exe /sha256 $thumb `"$rdp`"" | Out-Null }
-
-    Start-Process mstsc -ArgumentList "`"$rdp`""
-}
-
 function Invoke-VmReboot {
     <#
     .SYNOPSIS
-    Reboots a VM and waits for it to come back online, then re-logs in TA01 to restore the interactive
-    desktop. Used both for pre-batch fresh-boot setup (Invoke-TaRun.ps1) and inside Invoke-VMRecovery
+    Reboots a VM and waits for it to come back online, then lets auto-logon settle the desktop.
+    Used both for pre-batch fresh-boot setup (Invoke-TaRun.ps1) and inside Invoke-VMRecovery
     for wedge recovery. Keeping the logic in one place prevents drift between the two callers.
+
+    VMs use console auto-logon: after a reboot, Windows boots straight into an unlocked TA01
+    desktop (Session 1) without any RDP connection required.
     #>
     param([string]$Machine, [string]$Ta01Pw)
 
@@ -176,18 +126,16 @@ function Invoke-VmReboot {
     Invoke-RecoverySleep -Seconds 45   # let reboot begin before probing
     $deadline = (Get-Date).AddMinutes(8)
     do { Invoke-RecoverySleep -Seconds 15 } until ((Test-VmSharePath "\\$Machine\Apps") -or (Get-Date) -gt $deadline)
-    Invoke-RecoverySleep -Seconds 45   # let the auto-logon and desktop settle
 
-    # 3) Re-login TA01 to restore the interactive desktop (GUI automation requires it)
-    Connect-TA01Rdp -Machine $Machine -Pass $Ta01Pw
-    Invoke-RecoverySleep -Seconds 20   # allow mstsc to fully establish the session
+    # 3) Let auto-logon and the desktop settle (console auto-logon re-establishes unlocked Session 1)
+    Invoke-RecoverySleep -Seconds 45
 }
 
 function Invoke-VMRecovery {
     <#
     .SYNOPSIS
-    Recovers a wedged VM: ends the stale scheduled task, reboots the VM, waits for the share to return,
-    then re-logs in TA01 to restore the interactive desktop. Ported from SKILL.md Step 5.5.
+    Recovers a wedged VM: ends the stale scheduled task, reboots the VM, waits for the share to
+    return, then lets auto-logon re-establish the desktop. Ported from SKILL.md Step 5.5.
 
     Called by Invoke-TaRun.ps1 when Trigger A (RDP-drop signature) or Trigger B (45-min idle) fires
     and -AutoRecover is 'true'. Capped at 2 recoveries per suite run by the caller.
@@ -198,8 +146,8 @@ function Invoke-VMRecovery {
     # 1) Stop the wedged run (defensive - Remove-RemoteTask already deleted the task, but /end is safe as a no-op)
     Invoke-RecoveryCmd "schtasks /end /s `"$Machine`" /u `"$winUser`" /p `"$Ta01Pw`" /tn `"$TaskName`"" | Out-Null
 
-    # 2-4) Reboot, wait for the share to return, and re-login TA01
+    # 2-3) Reboot and wait for auto-logon to settle
     Invoke-VmReboot -Machine $Machine -Ta01Pw $Ta01Pw
 }
 
-Export-ModuleMember -Function Test-RdpDropSignature, Get-AffectedTests, Connect-TA01Rdp, Invoke-VmReboot, Invoke-VMRecovery
+Export-ModuleMember -Function Test-RdpDropSignature, Get-AffectedTests, Invoke-VmReboot, Invoke-VMRecovery
