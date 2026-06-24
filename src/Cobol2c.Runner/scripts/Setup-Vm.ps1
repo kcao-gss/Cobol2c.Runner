@@ -33,6 +33,10 @@ This script is the manual fallback for a fresh or reassigned VM.
 
 #Requires -RunAsAdministrator
 
+param(
+    [string]$Ta01Pw = ''   # if provided, used for step-5 LSA autologon non-interactively; else prompts (Read-Host)
+)
+
 $ErrorActionPreference = 'Stop'
 
 Write-Host '=== Cobol2c.Runner VM Setup ===' -ForegroundColor Cyan
@@ -101,19 +105,23 @@ if ($existingCert) {
     Write-Host "   OK: Created $certSubject (thumbprint $($cert.Thumbprint), expires $($cert.NotAfter.ToString('yyyy-MM-dd')))." -ForegroundColor Green
 }
 
-﻿# 5. Autologon via LSA secret (Sysinternals Autologon approach via P/Invoke)
+# 5. Autologon via LSA secret (Sysinternals Autologon approach via P/Invoke)
 # Stores the password in the LSA private data store so Windows reads it at boot
 # without a plaintext DefaultPassword REG_SZ. Also fixes DevicePasswordLessBuildVersion
 # which resets AutoAdminLogon to 0 on every boot if left at 0x2.
 Write-Host '5. Configuring autologon via LSA secret ...' -ForegroundColor Yellow
 
-$autologonPw = Read-Host -Prompt '   Enter TA01 password for autologon (will NOT be echoed)' -AsSecureString
-$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($autologonPw)
-$plainPw = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+if ([string]::IsNullOrEmpty($Ta01Pw)) {
+    $autologonPw = Read-Host -Prompt '   Enter TA01 password for autologon (will NOT be echoed)' -AsSecureString
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($autologonPw)
+    $plainPw = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+} else {
+    $plainPw = $Ta01Pw   # non-interactive: supplied at runtime (not stored)
+}
 
 # P/Invoke: LsaStorePrivateData writes to the LSA secret store (SYSTEM/local-admin readable)
-$lsaCode = @''
+$lsaCode = @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -185,7 +193,7 @@ public class LsaUtil {
         return r;
     }
 }
-''@
+'@
 
 Add-Type -TypeDefinition $lsaCode -Language CSharp
 
