@@ -17,6 +17,7 @@ public class PowerShellHost
 {
     // Mutable so the fallback path can update it and subsequent scripts skip the probe.
     private string _exe;
+    private readonly TimeSpan _jobTimeout;
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
@@ -26,8 +27,14 @@ public class PowerShellHost
     /// <summary>
     /// Defaults to "pwsh" (PowerShell 7+). Pass "powershell" for Windows PowerShell 5.1.
     /// Program.cs supplies the configured value from RunnerOptions.PowerShellExe.
+    /// jobTimeout controls how long a single script may run before it is killed and the job is
+    /// routed to failed/. Defaults to 2 hours (two full 45-min poll cycles + buffer).
     /// </summary>
-    public PowerShellHost(string powerShellExe = "pwsh") => _exe = powerShellExe;
+    public PowerShellHost(string powerShellExe = "pwsh", TimeSpan jobTimeout = default)
+    {
+        _exe        = powerShellExe;
+        _jobTimeout = jobTimeout == default ? TimeSpan.FromHours(2) : jobTimeout;
+    }
 
     public async Task<T> RunScriptAsync<T>(string scriptPath, IEnumerable<string> namedArgs, CancellationToken ct)
     {
@@ -66,20 +73,32 @@ public class PowerShellHost
             process.Start();
         }
 
-        // Read stdout and stderr concurrently to avoid deadlocks on large output
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+        // Link the caller's token with a per-job timeout so a locked/unreachable VM
+        // fails fast instead of hanging for the script's full poll loop (~90 min worst case).
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(_jobTimeout);
+        var jobCt = timeoutCts.Token;
 
-        // Kill the child tree if the cancellation token fires before the process exits.
+        // Read stdout and stderr concurrently to avoid deadlocks on large output
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(jobCt);
+        var stderrTask = process.StandardError.ReadToEndAsync(jobCt);
+
+        // Kill the child tree if cancellation fires (host shutdown OR our timeout above).
         // Without this, WaitForExitAsync cancels but the pwsh.exe process keeps running.
+        bool timedOut = false;
         try
         {
-            await process.WaitForExitAsync(ct);
+            await process.WaitForExitAsync(jobCt);
         }
         catch (OperationCanceledException)
         {
+            timedOut = !ct.IsCancellationRequested;   // true = our timeout, false = host shutdown
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
             catch { /* process already gone — ignore */ }
+            if (timedOut)
+                throw new TimeoutException(
+                    $"{Path.GetFileName(scriptPath)} did not complete within {_jobTimeout.TotalMinutes:0} minutes. " +
+                    "Check that the target VM is reachable and the TA01 desktop is unlocked.");
             throw;
         }
 

@@ -1,0 +1,38 @@
+[
+    {
+        "tc":   "27510",
+        "rep":  "Inventory",
+        "prj":  "Inventory",
+        "path": "/Production/2023 version/Inventory/Inventory Parts/27510_Inv_Add Cross Reference records {new program}"
+    },
+    {
+        "tc":   "27513",
+        "rep":  "Manufacturing",
+        "prj":  "Manufacturing",
+        "path": "/Ready To Build/2023 version/Quality System/RMA/27513_QS_RMA_Update RMA_DATE_ISSUED {new program}"
+    },
+    {
+        "tc":   "27514",
+        "rep":  "Inventory",
+        "prj":  "Inventory",
+        "path": "/Production/2023 version/Inventory/Inventory Parts/27514_Inv_Delete Cross Reference records {new program}"
+    },
+    {
+        "tc":   "27529",
+        "rep":  "GSS End to End",
+        "prj":  "GSS End to End",
+        "path": "/Production/2023 version/Quality System/Maintain Engineering Change Control/27529_QS_ECN_Open adding Parts to existing ECN"
+    },
+    {
+        "tc":   "27533",
+        "rep":  "Manufacturing",
+        "prj":  "Manufacturing",
+        "path": "/Production/2023 version/Quality System/Maintain Engineering Change Control/27533_QS_ECN_Delete an Open ECN"
+    },
+    {
+        "tc":   "27537",
+        "rep":  "Manufacturing",
+        "prj":  "Manufacturing",
+        "path": "/Production/2023 version/Shop Floor Control/Automated Work Order Generation - NEW/27537_SFC_AWOG_Forecasting Generate BOM WO"
+    }
+]
