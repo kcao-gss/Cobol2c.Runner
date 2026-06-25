@@ -1,4 +1,4 @@
-﻿#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
 # TaRecovery.Tests.ps1 - unit tests for TaRecovery.psm1 (Test-RdpDropSignature, Get-AffectedTests)
 # and the -r stripping logic used in New-TABatch.
 

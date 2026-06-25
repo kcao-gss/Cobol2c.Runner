@@ -1,6 +1,6 @@
-﻿<#
+<#
 .SYNOPSIS
-Remote-push TA execution controller - pushes test execution to a remote VM via schtasks /s + SMB,
+Remote-push TA execution controller — pushes test execution to a remote VM via schtasks /s + SMB,
 polls completion via TAShare marker files, then emits a TaRunResult JSON to stdout.
 
 Runs both the failing suite (e.g. Cobol2C) AND the SP2V6 reference suite on the target VM.
@@ -77,7 +77,7 @@ $RefLogDir   = "\\gss2k19rnd.gss.local\TAShare\$RefSuite\Logs\$Machine"
 
 # -- Batch generator (ported from run-ta-tests/SKILL.md Step 2) -----------------
 # $HtmlDir is a UNC path on TAShare - written by the VM batch, read by the controller for polling.
-function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$HtmlDir, [string]$RunToken, [string]$SuiteName) {
+function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$HtmlDir, [string]$RunToken, [string]$SuiteName, [string]$Ta01Pw) {
     $kw      = if ($IsLogging) { 'new program,batch,2023,log,without service' }
                else             { 'new program,batch,2023,without service' }
     # c2c flips GSS Communication Options Location to "COBOL 2 C#" (IVAL=3) so the suite runs against the
@@ -113,6 +113,9 @@ function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$H
     $L.Add('if not exist "%HTML%" mkdir "%HTML%"')
     $L.Add('REM 1) mark start; per-TC lines appended below')
     $L.Add('echo [%DATE% %TIME%] BATCH STARTED - deploying updated programs> "%HTML%\started.txt"')
+    $L.Add('REM 1b) provision credential for the 172.16.60.6 env/test-data share. VMs LOSE this on reboot;')
+    $L.Add('REM      without it EVERY test exits at init with "logigear env.xml does not exist" (whole-fleet 0-pass).')
+    $L.Add("cmdkey /add:172.16.60.6 /user:TGFTA-01\TA01 /pass:$Ta01Pw > `"%HTML%\cmdkey.log`" 2>&1")
     $L.Add('REM 2) stop integrity service so it cannot roll back the updated programs')
     $L.Add('echo Y| net stop "GssSystemIntegrityService" > "%HTML%\service-stop.log" 2>&1')
     $L.Add('REM 3) deploy updated programs from TAShare')
@@ -129,8 +132,13 @@ function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$H
         $status = & $esc ("Running TC {0} [{1}/{2}]: {3}" -f $t.tc, $t.rep, $t.prj, $leaf)
         # -r must start with "<tc>_" and must NOT contain { } < > (aborts TA CLI with 0x84104016)
         $rname  = ($leaf -replace '\s*\{[^}]*\}', '').Trim()
+        # Strip the trailing {variation} from -t too. The variation is selected at RUNTIME by the comma
+        # -kwd keyword set (which includes "new program"), NOT by the path. Leaving {new program} in -t
+        # pins the base variation -> keyword selection never fires -> the test silently runs the OLD
+        # programs (wrong build). So -t MUST be the BASE path with the trailing {variation} removed.
+        $tpath  = ($t.path -replace '\s*\{[^}]*\}\s*$', '')
         $cmd    = ('ta execute -ls "%LS%" -rep "{0}" -prj "{1}" -u "%USER%" -p "%PASS%" -t "{2}" -rs "%RS%" -ss "%STARTUP%" -kwd "%KEYWORDS%" -tscript "%HARNESS_FWD%" -tcmd "%HARNESS_CMD%" -tpath "%HARNESS_FWD%" -html "%HTML%" -subfld "0" -subhtml "0" -udf "%UDF%"{4} -r "{3}" -up "/{1}/Results/ManualRuns/{{year}}_{{month}}_{{day}}"' `
-                  -f $t.rep, $t.prj, $t.path, $rname, $capArgs)
+                  -f $t.rep, $t.prj, $tpath, $rname, $capArgs)
         $L.Add("REM --- TC $($t.tc) ---")
         $L.Add("echo [%DATE% %TIME%] $status>> `"%HTML%\started.txt`"")
         $L.Add("$cmd > `"%HTML%\ta-exec-$($t.tc).log`" 2>&1")
@@ -161,7 +169,7 @@ function Invoke-SuiteRun ([string]$Base, [string]$SuiteName, [string]$BatName,
         $taskName  = "Cobol2c.Runner_${SuiteName}_${Machine}_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
         $localBat  = Join-Path $env:TEMP $BatName
         $vmBatPath = "C:\Apps\TA-CMD\$BatName"
-        Set-Content -Path $localBat -Value (New-TABatch $Base $currentTests $isLogging $HtmlDir $taskName $SuiteName) -Encoding Ascii
+        Set-Content -Path $localBat -Value (New-TABatch $Base $currentTests $isLogging $HtmlDir $taskName $SuiteName $Ta01Pw) -Encoding Ascii
 
         # -- Clear log dir ------------------------------------------------------
         if ($isFirstAttempt -and $ClearLogs) {

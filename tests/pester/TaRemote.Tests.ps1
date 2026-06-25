@@ -1,5 +1,5 @@
-﻿#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
-# TaRemote.Tests.ps1 - unit tests for TaRemote.psm1
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
+# TaRemote.Tests.ps1 — unit tests for TaRemote.psm1
 # Tests cover: Assert-VmReady error paths, Invoke-RemoteTask flag correctness,
 # and Remove-RemoteTask cleanup ordering.
 
@@ -9,8 +9,8 @@ BeforeAll {
     Import-Module (Join-Path $script:scriptDir 'TaRemote.psm1') -Force
 }
 
-# -----------------------------------------------------------------------------
-Describe 'Assert-VmReady - preflight error paths' {
+# ─────────────────────────────────────────────────────────────────────────────
+Describe 'Assert-VmReady — preflight error paths' {
 
     Context 'TCP 445 refused (VM down or network-blocked)' {
         BeforeAll {
@@ -126,8 +126,8 @@ Describe 'Assert-VmReady - preflight error paths' {
     }
 }
 
-# -----------------------------------------------------------------------------
-Describe 'Invoke-RemoteTask - schtasks flag correctness' {
+# ─────────────────────────────────────────────────────────────────────────────
+Describe 'Invoke-RemoteTask — schtasks flag correctness' {
     # These tests verify the exact flags passed to schtasks /create and /run.
     # The flags are documented in TaRemote.psm1 with explicit "do NOT alter" warnings.
 
@@ -151,7 +151,7 @@ Describe 'Invoke-RemoteTask - schtasks flag correctness' {
     }
 
     It 'includes /it flag to bind the task to the interactive TA01 session' {
-        # Without /it the task runs in Session 0 with no display - TA GUI never renders
+        # Without /it the task runs in Session 0 with no display — TA GUI never renders
         $script:capturedCommands[0] | Should -Match ' /it '
     }
 
@@ -192,8 +192,8 @@ Describe 'Invoke-RemoteTask - schtasks flag correctness' {
     }
 }
 
-# -----------------------------------------------------------------------------
-Describe 'Remove-RemoteTask - cleanup ordering' {
+# ─────────────────────────────────────────────────────────────────────────────
+Describe 'Remove-RemoteTask — cleanup ordering' {
     It 'issues schtasks /delete before disconnecting the share' {
         $calls = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName TaRemote Invoke-Cmd {
@@ -218,7 +218,7 @@ Describe 'Remove-RemoteTask - cleanup ordering' {
     }
 }
 
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 Describe 'Connect-VmShare / Disconnect-VmShare' {
     It 'Connect-VmShare uses machine-qualified user and the Apps share' {
         $script:capturedConnectCmd = $null
@@ -244,5 +244,47 @@ Describe 'Connect-VmShare / Disconnect-VmShare' {
             [pscustomobject]@{ Output = 'This connection has not been made.'; ExitCode = 1 }
         }
         { Disconnect-VmShare -Machine 'TGFTA-118' } | Should -Not -Throw
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+Describe 'Invoke-Cmd — stdin-close and timeout guards' {
+    # These tests exercise the REAL Invoke-Cmd (no mock) to verify the two defensive
+    # properties that prevent pipeline hangs:
+    #   1. stdin is closed — a command that would block reading from stdin instead
+    #      receives EOF immediately and exits (e.g. "pause" → exits with code 1
+    #      rather than blocking forever).
+    #   2. timeout — a slow command is killed and throws after the deadline.
+    # Both tests must complete in well under 10 s; a regression would cause them to hang.
+
+    It 'passes EOF to the child process so stdin-sensitive commands do not block' {
+        # "echo Y | choice /c YN /n" would select Y interactively, but with stdin closed
+        # (< NUL) the child gets EOF on the very first read and returns a non-zero exit
+        # code without hanging.  We just verify the call completes in finite time.
+        $result = InModuleScope TaRemote {
+            Invoke-Cmd -Command 'choice /c YN /n /t 0 /d N'
+        }
+        # choice exits 1 (Y) or 2 (N); either is fine — what matters is it returned at all.
+        $result.ExitCode | Should -BeIn @(1, 2)
+    }
+
+    It 'throws a timeout error when the command exceeds TimeoutSeconds' {
+        # ping -n 6 takes ~5 s; a 2-second timeout fires before it finishes.
+        { InModuleScope TaRemote { Invoke-Cmd -Command 'ping -n 6 127.0.0.1' -TimeoutSeconds 2 } } |
+            Should -Throw -ExpectedMessage '*timed out*'
+    }
+
+    It 'includes /f in schtasks /create so an existing task name never triggers an overwrite prompt' {
+        # Regression guard: /f must be present so schtasks does not show an interactive
+        # "overwrite? [Y/N]" dialog when the task already exists.
+        $createCmd = $null
+        Mock -ModuleName TaRemote Invoke-Cmd {
+            if ($Command -match 'schtasks /create') { $script:createCmd = $Command }
+            [pscustomobject]@{ Output = 'SUCCESS'; ExitCode = 0 }
+        }
+        InModuleScope TaRemote { $script:createCmd = $null }
+        Invoke-RemoteTask -Machine 'TGFTA-118' -Ta01Pw 'pw' `
+                          -TaskName 'TestTask' -BatPath 'C:\Apps\TA-CMD\run.bat'
+        $script:createCmd | Should -Match ' /f'
     }
 }

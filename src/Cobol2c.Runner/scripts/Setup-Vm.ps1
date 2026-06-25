@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 One-time per-VM admin setup for Cobol2c.Runner remote-push. Run as admin ON the target VM.
 
@@ -6,7 +6,7 @@ This script CANNOT be run remotely. LocalAccountTokenFilterPolicy is what blocks
 token elevation on non-domain (workgroup) machines, so you must be in a local or console session
 when running this. The easiest approach: RDP to the VM, open PowerShell as admin, paste this path.
 
-Idempotent - safe to run multiple times. Re-run after a VM reimage or pool reassignment.
+Idempotent — safe to run multiple times. Re-run after a VM reimage or pool reassignment.
 
 Why each step is needed:
   1. LocalAccountTokenFilterPolicy=1
@@ -32,6 +32,10 @@ This script is the manual fallback for a fresh or reassigned VM.
 #>
 
 #Requires -RunAsAdministrator
+
+param(
+    [string]$Ta01Pw = ''   # if provided, used for step-5 LSA autologon non-interactively; else prompts (Read-Host)
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -101,14 +105,138 @@ if ($existingCert) {
     Write-Host "   OK: Created $certSubject (thumbprint $($cert.Thumbprint), expires $($cert.NotAfter.ToString('yyyy-MM-dd')))." -ForegroundColor Green
 }
 
+# 5. Autologon via LSA secret (Sysinternals Autologon approach via P/Invoke)
+# Stores the password in the LSA private data store so Windows reads it at boot
+# without a plaintext DefaultPassword REG_SZ. Also fixes DevicePasswordLessBuildVersion
+# which resets AutoAdminLogon to 0 on every boot if left at 0x2.
+Write-Host '5. Configuring autologon via LSA secret ...' -ForegroundColor Yellow
+
+if ([string]::IsNullOrEmpty($Ta01Pw)) {
+    $autologonPw = Read-Host -Prompt '   Enter TA01 password for autologon (will NOT be echoed)' -AsSecureString
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($autologonPw)
+    $plainPw = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+} else {
+    $plainPw = $Ta01Pw   # non-interactive: supplied at runtime (not stored)
+}
+
+# P/Invoke: LsaStorePrivateData writes to the LSA secret store (SYSTEM/local-admin readable)
+$lsaCode = @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public class LsaUtil {
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern uint LsaOpenPolicy(ref LSA_UNICODE_STRING SystemName,
+        ref LSA_OBJECT_ATTRIBUTES ObjectAttributes, uint DesiredAccess,
+        out IntPtr PolicyHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern uint LsaStorePrivateData(IntPtr PolicyHandle,
+        ref LSA_UNICODE_STRING KeyName, ref LSA_UNICODE_STRING PrivateData);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern uint LsaClose(IntPtr ObjectHandle);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LSA_UNICODE_STRING {
+        public ushort Length;
+        public ushort MaximumLength;
+        public IntPtr Buffer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LSA_OBJECT_ATTRIBUTES {
+        public uint Length;
+        public IntPtr RootDirectory;
+        public IntPtr ObjectName;
+        public uint Attributes;
+        public IntPtr SecurityDescriptor;
+        public IntPtr SecurityQualityOfService;
+    }
+
+    public static uint StorePrivateData(string keyName, string value) {
+        var sysName = new LSA_UNICODE_STRING();
+        var objAttr = new LSA_OBJECT_ATTRIBUTES { Length = (uint)Marshal.SizeOf(typeof(LSA_OBJECT_ATTRIBUTES)) };
+
+        IntPtr policy;
+        uint r = LsaOpenPolicy(ref sysName, ref objAttr, 0x20006 /* POLICY_CREATE_SECRET | POLICY_WRITE */, out policy);
+        if (r != 0) return r;
+
+        try {
+            byte[] keyBytes = Encoding.Unicode.GetBytes(keyName);
+            byte[] valBytes = Encoding.Unicode.GetBytes(value);
+
+            IntPtr keyBuf = Marshal.AllocHGlobal(keyBytes.Length);
+            IntPtr valBuf = Marshal.AllocHGlobal(valBytes.Length);
+            Marshal.Copy(keyBytes, 0, keyBuf, keyBytes.Length);
+            Marshal.Copy(valBytes, 0, valBuf, valBytes.Length);
+
+            var keyStr = new LSA_UNICODE_STRING {
+                Length = (ushort)keyBytes.Length,
+                MaximumLength = (ushort)keyBytes.Length,
+                Buffer = keyBuf
+            };
+            var valStr = new LSA_UNICODE_STRING {
+                Length = (ushort)valBytes.Length,
+                MaximumLength = (ushort)valBytes.Length,
+                Buffer = valBuf
+            };
+
+            r = LsaStorePrivateData(policy, ref keyStr, ref valStr);
+            Marshal.FreeHGlobal(keyBuf);
+            Marshal.FreeHGlobal(valBuf);
+        } finally {
+            LsaClose(policy);
+        }
+        return r;
+    }
+}
+'@
+
+Add-Type -TypeDefinition $lsaCode -Language CSharp
+
+$keyName = 'DefaultPassword'
+$result = [LsaUtil]::StorePrivateData($keyName, $plainPw)
+$plainPw = $null   # clear from memory promptly
+
+if ($result -ne 0) {
+    throw "LsaStorePrivateData failed with NTSTATUS 0x$($result.ToString('X8')). Ensure you are running as admin."
+}
+Write-Host '   OK: LSA secret DefaultPassword stored.' -ForegroundColor Green
+
+# Set Winlogon keys for autologon (without plaintext DefaultPassword REG_SZ)
+$wlKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+Set-ItemProperty -Path $wlKey -Name 'AutoAdminLogon'  -Value '1'             -Type String -Force
+Set-ItemProperty -Path $wlKey -Name 'DefaultUserName' -Value 'TA01'           -Type String -Force
+Set-ItemProperty -Path $wlKey -Name 'DefaultDomainName' -Value (hostname)     -Type String -Force
+Set-ItemProperty -Path $wlKey -Name 'ForceAutoLogon'  -Value '1'             -Type String -Force
+Set-ItemProperty -Path $wlKey -Name 'DisableCad'      -Value '1'             -Type DWord  -Force
+
+# Remove plaintext DefaultPassword REG_SZ if present (LSA secret supersedes it)
+Remove-ItemProperty -Path $wlKey -Name 'DefaultPassword' -ErrorAction SilentlyContinue
+Write-Host '   OK: DefaultPassword REG_SZ removed (LSA secret is authoritative).' -ForegroundColor Green
+
+# Fix DevicePasswordLessBuildVersion — if set to 0x2 it resets AutoAdminLogon to 0 on every boot
+$pwlessKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PasswordLess\Device'
+if (Test-Path $pwlessKey) {
+    Set-ItemProperty -Path $pwlessKey -Name 'DevicePasswordLessBuildVersion' -Value 0 -Type DWord -Force
+    Write-Host '   OK: DevicePasswordLessBuildVersion = 0 (prevents autologon reset on boot).' -ForegroundColor Green
+} else {
+    Write-Host '   INFO: DevicePasswordLessBuildVersion key absent — no reset risk.' -ForegroundColor Cyan
+}
+
+Write-Host '   OK: Autologon configured (LSA secret). Reboot to apply.' -ForegroundColor Green
+
 Write-Host ''
 Write-Host "=== Setup complete on $env:COMPUTERNAME ===" -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Verify from the controller host:' -ForegroundColor White
 Write-Host "  Test-NetConnection $env:COMPUTERNAME -Port 445   # TcpTestSucceeded: True" -ForegroundColor Gray
 Write-Host "  Test-NetConnection $env:COMPUTERNAME -Port 135   # TcpTestSucceeded: True" -ForegroundColor Gray
-Write-Host "  net use \\$env:COMPUTERNAME\Apps /user:$env:COMPUTERNAME\TA01 Testarchitect01" -ForegroundColor Gray
-Write-Host "  schtasks /query /s $env:COMPUTERNAME /u $env:COMPUTERNAME\TA01 /p Testarchitect01" -ForegroundColor Gray
+Write-Host "  net use \\$env:COMPUTERNAME\Apps /user:$env:COMPUTERNAME\TA01 <password>" -ForegroundColor Gray
+Write-Host "  schtasks /query /s $env:COMPUTERNAME /u $env:COMPUTERNAME\TA01 /p <password>" -ForegroundColor Gray
 Write-Host ''
 Write-Host 'IMPORTANT: This setup survives reboots but is lost on VM reimage/reassignment.' -ForegroundColor Yellow
 Write-Host 'For permanent provisioning, bake steps 1-3 into the golden VM image.' -ForegroundColor Yellow

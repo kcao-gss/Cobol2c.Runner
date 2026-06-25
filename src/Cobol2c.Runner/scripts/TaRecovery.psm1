@@ -1,4 +1,4 @@
-﻿# TaRecovery.psm1
+# TaRecovery.psm1
 # Wedged-VM detection and recovery - ported from run-ta-tests/SKILL.md Step 5.5.
 # Imported by Invoke-TaRun.ps1; unit-tested in tests/pester/TaRecovery.Tests.ps1.
 

@@ -1,12 +1,12 @@
-﻿<#
+<#
 .SYNOPSIS
 One-off diagnostic: push a network-connectivity probe to a VM via schtasks /s and read
-results back from TAShare. Runs as TA01 with /it (interactive session) - the exact same
-context as ta execute - so the TCP results reflect what ta execute would see.
+results back from TAShare. Runs as TA01 with /it (interactive session) — the exact same
+context as ta execute — so the TCP results reflect what ta execute would see.
 
 .PARAMETER Machine    VM name, e.g. "TGFTA-119"
 
-Ta01Pw is read from $env:Runner__Ta01Pw (same as the runner - do NOT pass as an arg).
+Ta01Pw is read from $env:Runner__Ta01Pw (same as the runner — do NOT pass as an arg).
 #>
 param([string]$Machine = 'TGFTA-119')
 
@@ -24,7 +24,7 @@ $ProbeDir   = "\\gss2k19rnd.gss.local\TAShare\Cobol2C\Logs\$Machine\netprobe"
 $taskName   = "Cobol2c.Probe_$([datetime]::UtcNow.ToString('HHmmss'))"
 $localBat   = Join-Path $env:TEMP 'netprobe.bat'
 
-# -- Generate the probe batch ------------------------------------------------
+# ── Generate the probe batch ────────────────────────────────────────────────
 $bat = @"
 @echo off
 set PROBE_DIR=\\gss2k19rnd.gss.local\TAShare\Cobol2C\Logs\$Machine\netprobe
@@ -82,21 +82,21 @@ try {
     Copy-BatToVm     -Machine $Machine -BatPath $localBat
     Invoke-RemoteTask -Machine $Machine -Ta01Pw $Ta01Pw -TaskName $taskName -BatPath 'C:\Apps\TA-CMD\netprobe.bat'
 
-    # -- Poll for probe-done.txt (timeout 5 min) -----------------------------
+    # ── Poll for probe-done.txt (timeout 5 min) ─────────────────────────────
     $donePath = Join-Path $ProbeDir 'probe-done.txt'
     $deadline  = (Get-Date).AddMinutes(5)
     Write-Host 'Polling for probe-done.txt …'
     while (-not (Test-Path -LiteralPath $donePath)) {
         if ((Get-Date) -gt $deadline) {
-            throw "Probe timed out after 5 min - probe-done.txt never appeared in $ProbeDir"
+            throw "Probe timed out after 5 min — probe-done.txt never appeared in $ProbeDir"
         }
         Start-Sleep -Seconds 5
         Write-Host '  … waiting'
     }
     Write-Host 'Probe complete. Results:'
-    Write-Host ('-' * 72)
+    Write-Host ('─' * 72)
     Get-Content -LiteralPath (Join-Path $ProbeDir 'probe.txt') | Write-Host
-    Write-Host ('-' * 72)
+    Write-Host ('─' * 72)
 } finally {
     Remove-RemoteTask -Machine $Machine -Ta01Pw $Ta01Pw -TaskName $taskName
     Remove-Item -LiteralPath $localBat -Force -ErrorAction SilentlyContinue
