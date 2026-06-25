@@ -16,3 +16,21 @@ TestResults/
 # OS
 Thumbs.db
 .DS_Store
+
+# Local dev config / launch settings
+appsettings.Development.json
+**/Properties/launchSettings.json
+
+# Claude session/worktree + publish output
+.claude/
+publish/
+
+# Runtime job spool (drop/done/failed are created at run time)
+fixtures/jobs/done/
+fixtures/jobs/failed/
+
+# Session-specific scratch run-configs (the canonical template is unattended-vms.json)
+src/Cobol2c.Runner/scripts/cfg-check.json
+src/Cobol2c.Runner/scripts/unattended-97*.json
+src/Cobol2c.Runner/scripts/unattended-98*.json
+src/Cobol2c.Runner/scripts/unattended-99*.json
