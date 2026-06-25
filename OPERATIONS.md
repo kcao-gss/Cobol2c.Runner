@@ -1,6 +1,6 @@
 # Cobol2c.Runner — Operations & Current State
 
-_Last updated: 2026-06-25. Snapshot of the headless TA test pipeline, the VM fleet, deployed builds, and open items. Nothing in this repo is pushed to a remote._
+_Last updated: 2026-06-25. Snapshot of the headless TA test pipeline, the VM fleet, deployed builds, and open items. Pushed to origin (`github.com/kcao-gss/Cobol2c.Runner`); `master` = `ba7bf3e`._
 
 ## What this is
 A push-pipeline that runs TestArchitect (TA) GUI tests on remote VMs headlessly and harvests results, for A/B testing the **Cobol2C** (converted C#) suite against the **SP2V6** (COBOL baseline) suite.
@@ -31,18 +31,19 @@ A push-pipeline that runs TestArchitect (TA) GUI tests on remote VMs headlessly 
 ## Deployed builds
 - **TMPOR fix** (`FileControlBlock.cs` `.TrimEnd('\0',' ')`) is deployed to base `Cobol2C\Bin\SemanticDesigns.dll` + the `<VM>Bin` overlays. Source committed on **GSSLegacy branch `cobol2c-tmpor-fix` `3bf7f39`** (not pushed; promote to official build).
 
-## Branches & commits (NONE pushed)
-- **Cobol2c.Runner / master:** `429a239` headless pipeline · `e2d4e17` + `66f40e1` cred-harden phase 1.
-- **Cobol2c.Runner / `wip/pull-agent` `e6d2cec`:** Phase-2 pull-agent (Cobol2c.Agent) + runner wiring — **DOES NOT BUILD** (`Agent.Tests/PerTcExecutionTests.cs` → missing `JobExecutor`, 6× CS0246). Finish `JobExecutor` before merging.
-- **GSSLegacy / `cobol2c-tmpor-fix` `3bf7f39`:** the TMPOR converted-code fix.
+## Branches & commits (all pushed to origin except GSSLegacy)
+- **Cobol2c.Runner / master `ba7bf3e`:** headless pipeline + cred-harden phase 1 + **pre-batch VM reboot & 3-machine unanimous confirmation** (feat, ff `10dc800`) + **Phase-2 pull-agent (Cobol2c.Agent) with `JobExecutor`** (merged `--no-ff`). Builds clean; Agent 23/23, Runner 10/10, Pester 111/111.
+- **Cobol2c.Runner / `feat/pre-batch-reboot-3machine-confirmation` `10dc800`:** merged into master; pushed.
+- **Cobol2c.Runner / `wip/pull-agent` `3017213`:** `JobExecutor` implemented (BUILDS, 23/23); merged into master; pushed.
+- **GSSLegacy / `cobol2c-tmpor-fix` `3bf7f39`:** the TMPOR converted-code fix — still local-only (promote to official build, item 1).
 
 ## Open / deferred items
 1. **Push & promote** the TMPOR fix to the official GSSLegacy build (it's local-only).
 2. **Escalate (TA admin @172.16.43.66):** the residual OE_Shipment NOT-FINISHEDs are **TA-side window/interface verification**, not converted code (the C# screens render; ORD098 control flow verified faithful to COBOL). See report `Projects/cobol2c/reports/OE_Shipment Cobol2C — fix and findings 2026-06-24.md`.
 3. **Re-provision TGFTA-98** + pull the GSSMenu crash dump (`C:\Users\TA01\AppData\Local\CrashDumps`).
-4. **Finish `JobExecutor`** on `wip/pull-agent` (Phase-2 pull-agent), then build + merge.
+4. ~~Finish `JobExecutor` on `wip/pull-agent`~~ — **DONE** (merged into `master` `ba7bf3e`, 23/23).
 5. **Cred-harden tail:** scrub old plaintext `.bat` on VM 98/99 (Phase-2 pull-agent supersedes); rotate the TA01 password (deferred — still live in history/logs).
-6. **Working-tree leftovers (uncommitted, ambiguous ownership):** `scripts/tc-manifest.json` (M, session TC additions), `scripts/Update-TcManifest.ps1` (M), `fixtures/jobs/job-INV010XR.json` (D), `scripts/dispatching` (0-byte stray). Review + commit/discard.
+6. ~~Working-tree leftovers~~ — **RESOLVED**: applied the session TC additions to `scripts/tc-manifest.json` (6→41 entries), removed the unreferenced `fixtures/jobs/job-INV010XR.json` stray pending-job and the 0-byte `scripts/dispatching` stray; `Update-TcManifest.ps1` was already on master via the merge.
 
 ## Credentials (no secrets in this repo)
 - VM account: **TA01** (LSA-secret autologon; `-Ta01Pw` passed at runtime, not stored). App-level ERP login: **GSSTester** (in TA test data). The literal TA01 password was removed from the repo in cred-harden phase 1 — do not re-add it.

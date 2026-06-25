@@ -1,7 +1,0 @@
-{
-  "Id": "job-INV010XR",
-  "Suite": "Cobol2C",
-  "Machine": "TGFTA-57",
-  "Tcs": [27510],
-  "Logging": true
-}
