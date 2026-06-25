@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Cobol2c.Agent</RootNamespace>
+    <AssemblyName>Cobol2c.Agent</AssemblyName>
+    <!-- Self-contained publish: dotnet publish -r win-x64 -p:SelfContained=true -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Reuse Runner types (TestJob, TaRunResult, PowerShellHost) directly -->
+  <ItemGroup>
+    <ProjectReference Include="..\Cobol2c.Runner\Cobol2c.Runner.csproj" />
+  </ItemGroup>
+
+  <!-- Copy PS scripts alongside EXE so agent locates them at runtime -->
+  <ItemGroup>
+    <None Include="scripts\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Agent's own config and installer script — declared explicitly so they survive
+       the RemoveRunnerTransitiveContent strip (which only removes Runner-path files)
+       and are present in the published bundle without any manual copying. -->
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Install-AgentTask.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+
+  <!-- Runner's scripts\** propagates transitively and collides with Agent's own copies
+       (both tc-manifest.json and any other scripts\ files land at the same relative path).
+       Strip Runner-sourced entries from ResolvedFileToPublish before the manifest is sealed.
+       Agent's OWN scripts\ entries (originating in this project's dir) still flow through. -->
+  <Target Name="RemoveRunnerTransitiveContent" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+        Condition="$([System.String]::Copy('%(ResolvedFileToPublish.FullPath)').Contains('\Cobol2c.Runner\src\Cobol2c.Runner\'))" />
+    </ItemGroup>
+  </Target>
+</Project>
