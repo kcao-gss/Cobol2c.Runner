@@ -1,10 +1,10 @@
 #Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0' }
 # TaHeadless.Tests.ps1 — unit tests for the headless unattended pipeline additions:
 #   1. console-park.ps1 session-id parse logic (including Disc session / blank SESSIONNAME)
-#   2. New-TABatch keyword guards (SP2V6 passes; Production/Cobol2C conditional logic
-#      removed — feat uses console auto-logon always; suite-aware $BatchSuite param
-#      from master not adopted on this branch)
-#   3. New-TABatch regression guards: {variation} strip from -t, cmdkey emission
+#   2. Suite-aware keyword construction in New-TABatch
+#   3. (removed) -Headless RDP routing — RDP re-login + -Headless path removed in 34d8f92;
+#      VMs use console auto-logon. TaRecovery.Tests.ps1 covers Invoke-VMRecovery behavior.
+#   4. New-TABatch regression guards: {variation} strip from -t, cmdkey emission
 
 BeforeAll {
     $script:repoRoot  = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -134,10 +134,35 @@ Describe 'New-TABatch — suite-aware keyword construction' {
         }
     }
 
-    # NOTE: Cobol2C ',c2c' append and Production 'new program' exclusion tests omitted here.
-    # Feat's New-TABatch uses the original single-path keyword logic (always prepends
-    # "new program"; appends ",c2c" for Cobol2C). Master's $BatchSuite conditional logic
-    # is not adopted on this branch. TaBatchGen.Tests.ps1 covers the critical fixes.
+    Context 'Cobol2C suite' {
+        It 'includes "new program" prefix' {
+            $kw = Get-Keywords 'Cobol2C'
+            $kw | Should -Match '^new program,'
+        }
+        It 'appends ",c2c"' {
+            $kw = Get-Keywords 'Cobol2C'
+            $kw | Should -Match ',c2c$'
+        }
+        It 'includes "without service"' {
+            $kw = Get-Keywords 'Cobol2C'
+            $kw | Should -Match 'without service'
+        }
+    }
+
+    Context 'Production suite' {
+        It 'does NOT include "new program"' {
+            $kw = Get-Keywords 'Production'
+            $kw | Should -Not -Match 'new program'
+        }
+        It 'does NOT include "c2c"' {
+            $kw = Get-Keywords 'Production'
+            $kw | Should -Not -Match 'c2c'
+        }
+        It 'includes "without service"' {
+            $kw = Get-Keywords 'Production'
+            $kw | Should -Match 'without service'
+        }
+    }
 
     Context 'logging flag' {
         It 'SP2V6 with logging includes ",log,"' {
@@ -151,12 +176,14 @@ Describe 'New-TABatch — suite-aware keyword construction' {
     }
 }
 
-# NOTE: Section 3 (-Headless routing tests) removed. Feat's TaRecovery.psm1 uses
-# console auto-logon always (no -Headless switch, no Enter-ConsoleSession /
-# Connect-TA01Rdp functions). TaRecovery.Tests.ps1 covers Invoke-VMRecovery behavior.
+# =============================================================================
+# 3. -Headless flag routing tests REMOVED (34d8f92).
+#    RDP re-login + Enter-ConsoleSession/Connect-TA01Rdp deleted from TaRecovery.psm1;
+#    VMs use console auto-logon always. TaRecovery.Tests.ps1 covers Invoke-VMRecovery.
+# =============================================================================
 
 # =============================================================================
-# 3. New-TABatch regression guards — {variation} strip from -t and -r; cmdkey emission
+# 4. New-TABatch regression guards — {variation} strip from -t and -r; cmdkey emission
 # =============================================================================
 Describe 'New-TABatch — regression guards (variation strip + cmdkey)' {
     BeforeAll {

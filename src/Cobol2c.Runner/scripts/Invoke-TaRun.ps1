@@ -77,12 +77,20 @@ $RefLogDir   = "\\gss2k19rnd.gss.local\TAShare\$RefSuite\Logs\$Machine"
 
 # -- Batch generator (ported from run-ta-tests/SKILL.md Step 2) -----------------
 # $HtmlDir is a UNC path on TAShare - written by the VM batch, read by the controller for polling.
-function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$HtmlDir, [string]$RunToken, [string]$SuiteName, [string]$Ta01Pw) {
-    $kw      = if ($IsLogging) { 'new program,batch,2023,log,without service' }
-               else             { 'new program,batch,2023,without service' }
-    # c2c flips GSS Communication Options Location to "COBOL 2 C#" (IVAL=3) so the suite runs against the
-    # converted programs. Cobol2C only - the SP2V6 reference must stay on the legacy baseline.
-    if ($SuiteName -eq 'Cobol2C') { $kw = "$kw,c2c" }
+function New-TABatch ([string]$Base, [array]$Tests, [bool]$IsLogging, [string]$HtmlDir,
+                      [string]$RunToken, [string]$BatchSuite = $Suite, [string]$Ta01Pw) {
+    # Suite-aware keyword construction — must match the manager's run-ta-tests skill:
+    #   base: batch,2023[,log],without service
+    #   SP2V6 + Cobol2C: prefix "new program," (selects the updated-program variation at runtime)
+    #   Cobol2C only:    append ",c2c"          (routes to the C# converted programs)
+    #   Production:      neither "new program" nor "c2c" (plain baseline run)
+    $needNewProgram = ($BatchSuite -eq 'SP2V6' -or $BatchSuite -eq 'Cobol2C')
+    $needC2c        = ($BatchSuite -eq 'Cobol2C')
+
+    $kwBase = if ($IsLogging) { 'batch,2023,log,without service' }
+              else             { 'batch,2023,without service' }
+    $kw     = if ($needNewProgram) { "new program,$kwBase" } else { $kwBase }
+    if ($needC2c) { $kw += ',c2c' }
     $html    = $HtmlDir
     $tcLabel = ($Tests | ForEach-Object { $_.tc }) -join ', '
     $esc     = { param($s) (($s -replace '\^','^^') -replace '([&<>|()])','^$1') -replace '%','%%' }
